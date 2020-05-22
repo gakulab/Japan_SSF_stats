@@ -130,6 +130,37 @@ map_fun2013()
 
 
 
+#### By ages #####
+
+df_fishers_pref_age = df_fishers_pref %>%
+  filter(cat01_code != 11 & cat02_code == 11 & cat03_code == 11) %>%
+  dplyr::select(-cat01_code, -cat02_code,-cat03_code) %>% # only 2008 or 2013
+  mutate(`年齢階層_15歳-75歳以上` = parse_number(`年齢階層_15歳-75歳以上`)) %>%
+  mutate(`年齢階層_15歳-75歳以上` = paste0("age_",`年齢階層_15歳-75歳以上`)) %>%
+  pivot_wider(names_from = "年齢階層_15歳-75歳以上", values_from = "value") %>%
+  mutate(total = rowSums(select(., starts_with("age"))),
+         older = age_65 + age_70 + age_75,
+         aging_rate = older/total)
+
+# combine with map data
+map_fishers_pref_age = jp_sh2 %>%
+  left_join(df_fishers_pref_age, by = c("NL_NAME_1" = "地域事項(全国・都道府県・大海区)")) %>%
+  st_as_sf(.)
+
+
+# With Hokkaido (too large relative to others)
+map_age_fun0 = function(){
+  ggplot(map_fishers_pref_age %>% filter(!is.na(year)), aes(fill = aging_rate)) +
+    geom_sf(size = 0.1) + 
+    coord_sf(xlim = c(126,148), ylim = c(26,47), # set range, include Okinawa, but not other islands
+             datum = NA) + # not show the coordinates and axis labels 
+    scale_fill_viridis_c(option = "plasma") +
+    labs(title = "Aging rate of fishers by prefecture") +
+    theme_bw() +
+    facet_wrap(~year)
+}
+map_age_fun0()
+
 
 #======= Not used below ===============
 
