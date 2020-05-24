@@ -2,12 +2,14 @@
 
 
 # library
-library(tidyverse)
-library(readxl)
-library(sp)
-library(sf)
-library(estatapi)
-library(patchwork)
+pacman::p_load(
+  tidyverse,
+  readxl,
+  sp,
+  sf,
+  estataapi,
+  patchwork
+)
 
 
 # Load prefcecture shape file
@@ -84,6 +86,20 @@ df_fishers_pref = bind_rows(df_fishers_pref_age_2003,df_fishers_pref_age_2008,df
 df_fishers_pref_agg = df_fishers_pref %>%
   filter(cat01_code == 11 & cat02_code == 11 & cat03_code == 11)
 
+
+# town level
+df_fishers_town_age_2008 = estat_getStatsData(appId = appID,
+                                              statsDataId = "0003124203") %>%
+  mutate(year = 2008)
+
+df_fishers_town_age_2013 = estat_getStatsData(appId = appID,
+                                              statsDataId = "0003124202") %>%
+  mutate(year = 2013)
+
+df_fishers_town = bind_rows(df_fishers_town_age_2008,df_fishers_town_age_2013) %>%
+  mutate(area_code_num = as.numeric(area_code)/1000) # make numeric to filter
+
+
 # combine with map data
 map_fishers_pref_agg = jp_sh2 %>%
   left_join(df_fishers_pref_agg, by = c("NL_NAME_1" = "地域事項(全国・都道府県・大海区)")) %>%
@@ -132,6 +148,7 @@ map_fun2013()
 
 #### By ages #####
 
+### prefecture level ###
 df_fishers_pref_age = df_fishers_pref %>%
   filter(cat01_code != 11 & cat02_code == 11 & cat03_code == 11) %>%
   dplyr::select(-cat01_code, -cat02_code,-cat03_code) %>% # only 2008 or 2013
@@ -140,7 +157,7 @@ df_fishers_pref_age = df_fishers_pref %>%
   pivot_wider(names_from = "年齢階層_15歳-75歳以上", values_from = "value") %>%
   mutate(total = rowSums(select(., starts_with("age"))),
          older = age_65 + age_70 + age_75,
-         aging_rate = older/total)
+         fisher_aging_rate = older/total)
 
 # combine with map data
 map_fishers_pref_age = jp_sh2 %>%
@@ -150,7 +167,7 @@ map_fishers_pref_age = jp_sh2 %>%
 
 # With Hokkaido (too large relative to others)
 map_age_fun0 = function(){
-  ggplot(map_fishers_pref_age %>% filter(!is.na(year)), aes(fill = aging_rate)) +
+  ggplot(map_fishers_pref_age %>% filter(!is.na(year)), aes(fill = fisher_aging_rate)) +
     geom_sf(size = 0.1) + 
     coord_sf(xlim = c(126,148), ylim = c(26,47), # set range, include Okinawa, but not other islands
              datum = NA) + # not show the coordinates and axis labels 
@@ -160,6 +177,118 @@ map_age_fun0 = function(){
     facet_wrap(~year)
 }
 map_age_fun0()
+
+
+### town level ###
+
+df_fishers_town_age = df_fishers_town %>%
+  mutate(town = ifelse(year == 2008, `地域事項(市区町村（漁業地区))_2008`,`地域事項(市区町村(漁業地区)）_2013`)) %>%
+  filter(cat01_code != 11 & cat02_code == 11) %>%
+  dplyr::select(-cat01_code, -cat02_code) %>% # only 2008 or 2013
+  mutate(`年齢階層_15歳-75歳以上` = parse_number(`年齢階層_15歳-75歳以上`)) %>%
+  mutate(`年齢階層_15歳-75歳以上` = paste0("age_",`年齢階層_15歳-75歳以上`)) %>%
+  pivot_wider(names_from = "年齢階層_15歳-75歳以上", values_from = "value") %>%
+  mutate_at(vars(starts_with("age_")), list(~ifelse(is.na(.),0,.))) %>%
+  mutate(total = rowSums(select(., starts_with("age"))),
+         older = age_65 + age_70 + age_75,
+         fisher_aging_rate = older/total)
+
+# ====== general population ==============
+
+# obtain the excel file from the e-stat website
+download.file("https://www.e-stat.go.jp/stat-search/file-download?statInfId=000031594311&fileKind=0",
+              "pop_town_2015.xls")
+df_pop_town_age_2015 = read_excel("pop_town_2015.xls")
+
+# extract column names
+colname_pop_town_age_2015 = df_pop_town_age_2015 %>% slice(6)
+
+# remove headers
+df_pop_town_age_2015 <- df_pop_town_age_2015 %>%
+  slice(-c(1:10))
+
+# replace column names
+colnames(df_pop_town_age_2015) <- colname_pop_town_age_2015
+class(df_pop_town_age_2015)
+df_pop_town_age_2015[,9:54] <- as.numeric(unlist(df_pop_town_age_2015[,9:54]))
+
+# remove prefecture and district (ward) within large cities
+df_pop_town_age_2015 <- df_pop_town_age_2015 %>%
+  filter(`市などの別` != "a" & `市などの別` != "0")
+
+# data explore
+summary(df_pop_town_age_2015)
+
+# merge fisheries census data
+
+df_pop_town_age_2015_fish <- df_pop_town_age_2015 %>%
+  left_join(df_fishers_town_age %>% filter(year == 2013), by = c("都道府県・市区町村名" = "town")) %>%
+  mutate(fish_town = ifelse(!is.na(total), "Yes", "No"))
+
+# scatetr plot, 高齢化率
+colnames(df_pop_town_age_2015_fish)
+
+ggplot(df_pop_town_age_2015_fish, aes(x = `市などの別`, fill=as.factor(fish_town), y=`【年齢別割合（総数）】65歳以上人口(％)`)) + 
+         geom_boxplot() +
+  labs(x = "City/town category (1 is large cities)",fill = "Fishing Community", y = "Aging rate (% of pop.  >=65 years old")
+
+#======= Fishery type by town ============
+
+
+# obtain the excel file from the e-stat website
+download.file("https://www.e-stat.go.jp/stat-search/file-download?statInfId=000029149689&fileKind=0",
+              "entity_town_2013.xls")
+df_fish_entity_town_2013 = read_excel("entity_town_2013.xls") 
+
+# extract header
+header_fish_entity_town_2013 <- df_fish_entity_town_2013 %>% slice(c(1:10)) %>%
+  tidyr::fill(.,.direction = "down")
+
+# make new header 
+colname_fish_entity_town_2013 = c("pref","district","town","nothing","num",
+                                  "total_entity","no_ves","ves_no_eng","ves_out_eng","ves_1t",
+                                  "ves_1_3","ves_3_5","ves_5_10","ves_10_20","ves_20_30",
+                                  "ves_30_50","ves_50_100","ves_100_200","ves_200_500","ves_500_1000",
+                                  "ves_1000_3000","ves_3000","setnet_big","setnet_salm","setnet_sma",
+                                  "aqa_salm","aqa_yt","aqa_snap","aqa_flou","aqa_tuna","aqa_oth_fish",
+                                  "aqa_scal","aqa_oys","aqa_oth_shell","aqa_shri","aqa_hoya",
+                                  "aqa_oth_anim","aqa_konbu","aqa_wakame","aqa_nori","aqa_oth_weed",
+                                  "aqa_pearl","aqa_peashell","coast_ent_total","coast_ent_aqa",
+                                  "coast_ent_oth","middle_ent","large_ent")
+
+# remove header
+df_fish_entity_town_2013 <- df_fish_entity_town_2013 %>% slice(-c(1:10))
+
+# new colnames 
+colnames(df_fish_entity_town_2013) <- colname_fish_entity_town_2013
+
+# convert - to 0
+df_fish_entity_town_2013 <- df_fish_entity_town_2013 %>%
+  mutate_all(list(~ifelse(. == "-",0,.))) %>%
+  mutate_at(vars(6:48), list(~as.numeric(.))) # NA is generated, because some towns do not have specific breakdown of the entities, which was "x" originally.
+
+
+# --- merge to df_pop_town_age_2015_fish ----
+
+df_pop_town_age_2015_fish_entity <- df_pop_town_age_2015_fish %>%
+  left_join(df_fish_entity_town_2013, by = c("都道府県・市区町村名" = "town")) %>%
+  mutate(coast_ent_per_capita =coast_ent_total/`【年齢（総数）】総数人口(人)`)
+
+# --- plot aging vs small scale entity
+
+ggplot(df_pop_town_age_2015_fish_entity %>% filter(fish_town == "Yes"), 
+       aes(x = coast_ent_total/total_entity, y = fisher_aging_rate)) + 
+  geom_point() + 
+  geom_smooth(method = c("loess")) +
+  labs(x = "SSF ratio (No. of coastal entities/total entities)", "Aging rate of workers in fisheries") +
+  theme_bw()
+
+ggplot(df_pop_town_age_2015_fish_entity %>% filter(fish_town == "Yes"), 
+       aes(x = coast_ent_total/total_entity, y = `【年齢別割合（総数）】65歳以上人口(％)`/100)) + 
+  geom_point() + 
+  geom_smooth(method = c("loess")) +
+  labs(x = "SSF ratio (No. of coastal entities/total entities)", y = "Aging rate of town (general pop.)") +
+  theme_bw()
 
 
 #======= Not used below ===============
