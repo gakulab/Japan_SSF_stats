@@ -1,5 +1,6 @@
 # SSF_japan draft
 
+# compiling the data of small scale fisheries (=coastal fisheries) in Japan. 
 
 # library
 pacman::p_load(
@@ -280,7 +281,14 @@ ggplot(df_pop_town_age_2015_fish_entity %>% filter(fish_town == "Yes"),
        aes(x = coast_ent_total/total_entity, y = fisher_aging_rate)) + 
   geom_point() + 
   geom_smooth(method = c("loess")) +
-  labs(x = "SSF ratio (No. of coastal entities/total entities)", "Aging rate of workers in fisheries") +
+  labs(x = "SSF ratio (No. of coastal entities/total entities)", y= "Aging rate of workers in fisheries") +
+  theme_bw()
+
+ggplot(df_pop_town_age_2015_fish_entity %>% filter(fish_town == "Yes"), 
+       aes(x = coast_ent_oth/total_entity, y = fisher_aging_rate)) + 
+  geom_point() + 
+  geom_smooth(method = c("loess")) +
+  labs(x = "SSF ratio (No. of coastal entities (excl. aquaculture)/total entities)",y = "Aging rate of workers in fisheries") +
   theme_bw()
 
 ggplot(df_pop_town_age_2015_fish_entity %>% filter(fish_town == "Yes"), 
@@ -290,20 +298,32 @@ ggplot(df_pop_town_age_2015_fish_entity %>% filter(fish_town == "Yes"),
   labs(x = "SSF ratio (No. of coastal entities/total entities)", y = "Aging rate of town (general pop.)") +
   theme_bw()
 
+ggplot(df_pop_town_age_2015_fish_entity %>% filter(fish_town == "Yes"), 
+       aes(x = coast_ent_oth/total_entity, y = `【年齢別割合（総数）】65歳以上人口(％)`/100)) + 
+  geom_point() + 
+  geom_smooth(method = c("loess")) +
+  labs(x = "SSF ratio (No. of coastal entities (excl. aquaculture)/total entities)", y = "Aging rate of town (general pop.)") +
+  theme_bw()
 
-#======= Not used below ===============
 
+#======= Accidents statistics ===============
 
-# obtain the data # 市町区村別漁業者数2008
-df_fishers = estat_getStatsData(appId = appID,
-                   statsDataId = "0003117408")
-# obtain the data # 漁業地区別漁業者数2008
-df_fishers_region = estat_getStatsData(appId = appID,
-                                statsDataId = "0003117445")
+# the statistics about the accidents are downloaded from the webpage of Coast Guard
+# https://www.kaiho.mlit.go.jp/doc/hakkou/toukei/toukei.html
+# manually downloaded and copied to compile "accidents_by_boat_size_2015_2019.xlsx"
 
-# obtain the data # 市町区村別水産加工場従業員数2008
-df_process = estat_getStatsData(appId = appID,
-                                statsDataId = "0003119220")
-# obtain the data # 市町区村別冷凍冷蔵工場従業員数2008
-df_freeze = estat_getStatsData(appId = appID,
-                                statsDataId = "0003119219")
+dat_acci = read_xlsx("accidents_by_boat_size_2015_2019.xlsx") %>%
+  pivot_longer(cols = -tons, names_to = "year",values_to = "number") %>%
+  mutate(tons = factor(tons, levels = c("<5t","5-20t","20-100t","100-500t","500-1000t","1000-3000t",">3000t")))
+
+ggplot(dat_acci, aes(x = year, y = number, fill = tons, order = tons)) + 
+  geom_bar(position = "stack",stat = "identity") + 
+  ylim(0,600) + 
+  scale_fill_discrete("Boat size", 
+                    breaks= c("<5t","5-20t","20-100t","100-500t","500-1000t","1000-3000t",">3000t"),
+                    labels= c("<5t","5-20t","20-100t","100-500t","500-1000t","1000-3000t",">3000t")) + 
+  labs(x = "Year", y = "Number of Accidents") + 
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank())
+
