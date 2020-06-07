@@ -1,0 +1,66 @@
+---
+title: "Statistics of Small Scale Fisheries in Japan"
+author: "Keita Abe"
+date: `r Sys.Date()`
+output: 
+  minidown::mini_document:
+    framework: water
+    theme: dark
+    code_folding:
+      source: hide
+      output: show
+      message: hide
+      warning: hide
+      error: hide
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# library
+pacman::p_load(
+  tidyverse,
+  readxl,
+  sp,
+  sf,
+  estataapi,
+  patchwork
+)
+
+# load Japan map
+
+##jp_sh = readRDS("gadm36_JPN_0_sf.rds") # 国 (country)
+jp_sh = readRDS("gadm36_JPN_1_sf.rds") # 都道府県 (prefecture)
+##jp_sh = readRDS("gadm36_JPN_2_sf.rds") # 市町区村 (cities/towns)
+
+jp_sh2 = st_simplify(jp_sh, preserveTopology = TRUE, dTolerance = 0.1)
+## pryr::object_size(jp_sh)
+## pryr::object_size(jp_sh2)
+head(jp_sh)
+
+# ggplot test
+##ggplot(jp_sh2) + 
+  ##geom_sf()
+  
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

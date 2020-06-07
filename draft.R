@@ -12,6 +12,7 @@ pacman::p_load(
   patchwork
 )
 
+library(estatapi)
 
 # Load prefcecture shape file
 # https://gadm.org/download_country_v3.html
@@ -19,8 +20,11 @@ pacman::p_load(
 ##jp_sh = readRDS("gadm36_JPN_0_sf.rds") # 国 (country)
 jp_sh = readRDS("gadm36_JPN_1_sf.rds") # 都道府県 (prefecture)
 ##jp_sh = readRDS("gadm36_JPN_2_sf.rds") # 市町区村 (cities/towns)
+##jp_sh = st_transform(jp_sh, 54032) # azimuthal equidistant. Transform this to avoid error
+# https://stackoverflow.com/questions/60008135/st-simplify-dtolerence-with-decimal-degree
 
-jp_sh2 = st_simplify(jp_sh, preserveTopology = TRUE, dTolerance = 0.01) 
+jp_sh2 = st_simplify(jp_sh, preserveTopology = TRUE, dTolerance = 0.1) 
+##jp_sh2 = st_transform(jp_sh2, 4326) # go back to WGS84
 ## pryr::object_size(jp_sh)
 ## pryr::object_size(jp_sh2)
 head(jp_sh)
@@ -316,7 +320,7 @@ dat_acci = read_xlsx("accidents_by_boat_size_2015_2019.xlsx") %>%
   pivot_longer(cols = -tons, names_to = "year",values_to = "number") %>%
   mutate(tons = factor(tons, levels = c("<5t","5-20t","20-100t","100-500t","500-1000t","1000-3000t",">3000t")))
 
-ggplot(dat_acci, aes(x = year, y = number, fill = tons, order = tons)) + 
+plot_acci = ggplot(dat_acci, aes(x = year, y = number, fill = tons, order = tons)) + 
   geom_bar(position = "stack",stat = "identity") + 
   ylim(0,600) + 
   scale_fill_discrete("Boat size", 
@@ -326,4 +330,6 @@ ggplot(dat_acci, aes(x = year, y = number, fill = tons, order = tons)) +
   theme(panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.background = element_blank())
+
+ggsave("accident_fishery_2015-2019.png", plot_acci)
 
