@@ -105,12 +105,32 @@ df_fishers_pref_age_2013 = estat_getStatsData(appId = appID,
                                               statsDataId = "0003122869") %>%
   mutate(year = 2013)
 
+
 # api is not available yet
 # obtain the excel file from the e-stat website
 ##download.file("https://www.e-stat.go.jp/stat-search/file-download?statInfId=000031918078&fileKind=0",
  ##                    "fishers_pref_2018.xls")
 ##df_fishers_pref_age_2018 = read_excel("fishers_pref_2018.xls")
 
+# 2018 Census data downloaded and cleaned by Raphael Roman
+df_fishers_pref_age_2018 = read_csv("Fishery_workers_2018.csv") %>%
+  mutate(year = 2018)
+
+  # load TODOFUKEN list
+  todofuken <- read_tsv("todouhuken.txt", col_names = FALSE) %>%
+    set_names(c("num","pref_JP","pref_EN")) %>%
+    mutate(pref_EN = str_to_title(pref_EN)) %>%
+    dplyr::select(-num)
+
+  df_fishers_pref_age_2018 <- df_fishers_pref_age_2018 %>%
+    left_join(todofuken, by = c("Prefectures" = "pref_EN")) %>%
+    rename("pref_EN" = "Prefectures") %>%
+    # for now, only use total number
+    dplyr::select(year,pref_JP,Total) %>%
+    rename("value" = "Total") %>%
+    filter(!is.na(pref_JP))
+
+  
 df_fishers_pref = bind_rows(df_fishers_pref_age_2003,df_fishers_pref_age_2008,df_fishers_pref_age_2013) %>%
   mutate(area_code_num = as.numeric(area_code)/1000) %>% # make numeric to filter
   filter(area_code_num %in% c(1:47)) %>%
@@ -119,11 +139,15 @@ df_fishers_pref = bind_rows(df_fishers_pref_age_2003,df_fishers_pref_age_2008,df
 
 # extract only aggregated (total) data (without gender/work type decompositions)
 df_fishers_pref_agg = df_fishers_pref %>%
-  filter(cat01_code == 11 & cat02_code == 11 & cat03_code == 11)
+  filter(cat01_code == 11 & cat02_code == 11 & cat03_code == 11) %>%
+  dplyr::select(year,area_code,area_code_num,`地域事項(全国・都道府県・大海区)`,value) %>%
+  rename("pref_JP" = "地域事項(全国・都道府県・大海区)") %>%
+  bind_rows(df_fishers_pref_age_2018) %>%
+  left_join(todofuken, by = c("pref_JP"))
 
 # combine with map data
 map_fishers_pref_agg = jp_sh2 %>%
-  left_join(df_fishers_pref_agg, by = c("NL_NAME_1" = "地域事項(全国・都道府県・大海区)")) %>%
+  left_join(df_fishers_pref_agg, by = c("NL_NAME_1" = "pref_JP")) %>%
   st_as_sf(.)
 ```
 
@@ -151,7 +175,7 @@ Hokkaido is large as a map and the number of fishers.
 ```{r}
 # Remove Hokkaido (too large relative to others)
 map_fun1 = function(){
-ggplot(map_fishers_pref_agg %>% filter(area_code != "01000") %>% filter(!is.na(year)), aes(fill = value)) +
+ggplot(map_fishers_pref_agg %>% filter(NAME_1 != "Hokkaido") %>% filter(!is.na(year)), aes(fill = value)) +
   geom_sf(size = 0.1) + 
   coord_sf(xlim = c(126,143), ylim = c(26,42), # set range, include Okinawa, but not other islands
            datum = NA) + # not show the coordinates and axis labels 
@@ -177,6 +201,40 @@ map_fun2013 = function(){
     theme_bw() 
 }
 map_fun2013()
+```
+
+### Time series 
+
+```{r, fig.width = 9, fig.height=6}
+
+plot_ts_fishers_pref = function(lang = "EN", save = FALSE){
+   
+    plot_EN = ggplot(df_fishers_pref_agg, aes(x = value, y = reorder(pref_EN,value), col = factor(year))) + 
+    geom_point(size = 1.15) + 
+    labs(x = "Total number of fisheries workers",y = "Prefecture", col = "Year")
+  
+    plot_JP = ggplot(df_fishers_pref_agg, aes(x = value, y = reorder(pref_JP,value), col = factor(year))) + 
+    geom_point(size = 1.5) + 
+    labs(x = "漁業従事者数(合計)",y = "都道府県", col = "年(漁業センサス)") + 
+      theme(legend.position = "bottom",
+            text = element_text(family = "HiraKakuPro-W3")) 
+    
+  if(lang == "JP"){
+    print(plot_JP)
+  }else{
+    print(plot_EN)
+  }
+  
+  if(save == TRUE){
+    ggsave(paste("Total_number_of_fisheries_workers_prefecture_",lang,".png"),height = 9,width = 6) 
+  }
+  
+ 
+  
+}
+
+ plot_ts_fishers_pref()
+ 
 ```
 
 
