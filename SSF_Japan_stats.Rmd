@@ -472,23 +472,46 @@ Small vessels tends to have accidents.
 ```{r acci_data}
 dat_acci = read_xlsx("accidents_by_boat_size_2015_2019.xlsx") %>%
   pivot_longer(cols = -tons, names_to = "year",values_to = "number") %>%
-  mutate(tons = factor(tons, levels = c("<5t","5-20t","20-100t","100-500t","500-1000t","1000-3000t",">3000t")))
+  mutate(tons2 = ifelse(tons %in% c("500-1000t","1000-3000t",">3000t"),
+                        ">500t",tons),
+         tons3 = ifelse(tons %in% c("100-500t","500-1000t","1000-3000t",">3000t"),
+                        ">100t",tons)) %>%
+  mutate(tons = factor(tons, levels = c("<5t","5-20t","20-100t","100-500t","500-1000t","1000-3000t",">3000t")),
+         tons2 = factor(tons2, levels =
+                          c("<5t","5-20t","20-100t","100-500t",">500t")),
+         tons3 = factor(tons3, levels =
+                          c("<5t","5-20t","20-100t",">100t")))
 
 ## ggsave("accident_fishery_2015-2019.png", plot_acci)
 ```
 
-```{r acci_plot}
-plot_acci = ggplot(dat_acci, aes(x = year, y = number, fill = tons, order = tons)) + 
+```{r acci_plot2}
+plot_acci2 = ggplot(dat_acci, aes(x = year, y = number, fill = tons2, order = tons2)) + 
   geom_bar(position = "stack",stat = "identity") + 
   ylim(0,600) + 
-  scale_fill_discrete("Boat size", 
-                    breaks= c("<5t","5-20t","20-100t","100-500t","500-1000t","1000-3000t",">3000t"),
-                    labels= c("<5t","5-20t","20-100t","100-500t","500-1000t","1000-3000t",">3000t")) + 
+  scale_fill_viridis_d("Boat size", 
+                    breaks= c("<5t","5-20t","20-100t","100-500t",">500t"),
+                    labels= c("<5t","5-20t","20-100t","100-500t",">500t")) + 
   labs(x = "Year", y = "Number of Accidents") + 
   theme(panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.background = element_blank())
 
-plot_acci
+plot_acci2
+## ggsave("accident_fishery_2015-2019_500t.png", plot_acci2)
 ```
+```{r acci_plot3}
+plot_acci3 = ggplot(dat_acci, aes(x = year, y = number, fill = tons3, order = tons3)) + 
+  geom_bar(position = "stack",stat = "identity") + 
+  ylim(0,600) + 
+  scale_fill_viridis_d("Boat size", 
+                    breaks= c("<5t","5-20t","20-100t",">100t"),
+                    labels= c("<5t","5-20t","20-100t",">100t")) + 
+  labs(x = "Year", y = "Number of Accidents") + 
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank())
 
+plot_acci3
+## ggsave("accident_fishery_2015-2019_100t.png", plot_acci3)
+```
