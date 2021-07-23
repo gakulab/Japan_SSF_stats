@@ -26,6 +26,8 @@ pacman::p_load(
   sp,
   sf,
   estataapi,
+  estimatr,
+  ggpmisc,
   skimr,
   patchwork
 )
@@ -52,6 +54,8 @@ head(jp_sh)
 ```{r, echo = FALSE}
 
 # use source to get appID. Hidden because API key is personal information. (and not uploaded on github)
+# use your own API key 
+# appId = ***YOUR API KEY****
 source("appID_get.R")
 
 ```
@@ -417,10 +421,30 @@ df_pop_town_age_2015_fish_entity <- df_pop_town_age_2015_fish %>%
 
 ggplot(df_pop_town_age_2015_fish_entity %>% filter(fish_town == "Yes"), 
        aes(x = coast_ent_total/total_entity, y = fisher_aging_rate)) + 
-  geom_point() + 
-  geom_smooth(method = c("loess")) +
-  labs(x = "SSF ratio (No. of coastal entities/total entities)", y= "Aging rate of workers in fisheries") +
-  theme_bw()
+  geom_point(size = 0.5) + 
+  geom_smooth(method = "lm", col = "grey50") +
+  labs(x = "Number of coastal entities/total entities", y= "Aging rate of workers in fisheries") +
+  theme_bw() + 
+  theme(panel.grid.minor = element_blank())
+
+# ggsave("aging_rate_fishery_2013.png", width = 7, height = 4)
+
+# add population
+my.formula <- y ~ x
+ggplot(df_pop_town_age_2015_fish_entity %>% filter(fish_town == "Yes"), 
+       aes(x = coast_ent_total/total_entity, y = fisher_aging_rate)) + 
+  geom_point(size = 0.5) + 
+　geom_smooth(method = "lm_robust", col = "grey50",show.legend = FALSE) +
+  stat_poly_eq(formula = my.formula,
+                eq.with.lhs = "italic(hat(y))~`=`~",
+                aes(label = paste(..eq.label.., ..p.value.label.., sep = "~~~")), 
+                parse = TRUE) + 
+  labs(x = "Number of coastal entities/total entities", 
+       y= "Aging rate of workers in fisheries") +
+  theme_bw() + 
+  theme(panel.grid.minor = element_blank())
+
+ggsave("aging_rate_fishery_2013.png", width = 7, height = 4)
 ```
 
 ### Aging rate and ratio of coastal fisheries without aquaculture
@@ -430,10 +454,11 @@ There are many small scale aquaculture along the coast. Not all of them are as i
 ```{r}
 ggplot(df_pop_town_age_2015_fish_entity %>% filter(fish_town == "Yes"), 
        aes(x = coast_ent_oth/total_entity, y = fisher_aging_rate)) + 
-  geom_point() + 
-  geom_smooth(method = c("loess")) +
-  labs(x = "SSF ratio (No. of coastal entities (excl. aquaculture)/total entities)",y = "Aging rate of workers in fisheries") +
-  theme_bw()
+  geom_point(size = 0.5) + 
+  geom_smooth(method = c("loess"), col = "grey60") +
+  labs(x = "Number of coastal entities (excl. mariculture)/total entities",y = "Aging rate of workers in fisheries") +
+  theme_bw() + 
+  theme(panel.grid.minor = element_blank())
 ```
 
 ### Aging rate of general population and SSF ratio
@@ -442,7 +467,7 @@ ggplot(df_pop_town_age_2015_fish_entity %>% filter(fish_town == "Yes"),
 ggplot(df_pop_town_age_2015_fish_entity %>% filter(fish_town == "Yes"), 
        aes(x = coast_ent_total/total_entity, y = `【年齢別割合（総数）】65歳以上人口(％)`/100)) + 
   geom_point() + 
-  geom_smooth(method = c("loess")) +
+  geom_smooth(method = c("loess"), col = "grey40") +
   labs(x = "SSF ratio (No. of coastal entities/total entities)", y = "Aging rate of town (general pop.)") +
   theme_bw()
 ```
@@ -459,6 +484,63 @@ ggplot(df_pop_town_age_2015_fish_entity %>% filter(fish_town == "Yes"),
   labs(x = "SSF ratio (No. of coastal entities (excl. aquaculture)/total entities)", y = "Aging rate of town (general pop.)") +
   theme_bw()
 ```
+
+
+# Workers, by gender
+
+```{r}
+dat_work_gender = readxl::read_excel("j117-30-121.xls",sheet = 2) %>%
+  pivot_longer(cols = c(-`年齢層`,-`性別`), names_to = "fisheries", values_to = "num_worker") %>%
+  mutate(`性別`= ifelse(`性別` == "男", "男性","女性"))
+
+ggplot(dat_work_gender, aes(x = `年齢層`, y = num_worker, col = `性別`, group = `性別`)) + 
+  geom_line() +
+  geom_point() +
+  facet_wrap(~fisheries) + 
+  theme_bw(base_family="HiraKakuPro-W3") + 
+  theme(axis.text.x = element_text(angle = 45,hjust = 1))
+
+# ratio of gender (aggregated)
+
+dat_work_gender_agg <- dat_work_gender %>%
+  group_by(`性別`,fisheries) %>%
+  summarise(num_worker = sum(num_worker)) %>%
+  ungroup()
+
+dat_work_gender_agg_ratio <- dat_work_gender_agg %>%
+  group_by(fisheries) %>%
+  mutate(gender_ratio = num_worker/sum(num_worker)) %>%
+  ungroup() %>%
+  mutate(large_category = ifelse(fisheries %in% c("沿岸漁業層計_養殖除く","海面養殖層計"), "沿岸漁業層のうち","漁業層別"),
+         large_category_n = as.numeric(large_category))
+  
+
+
+# plot
+
+# for the vertical line
+myLoc <- 
+  (which(levels(as.factor(dat_work_gender_agg_ratio$fisheries)) == "沿岸漁業層計") +
+     which(levels(as.factor(dat_work_gender_agg_ratio$fisheries)) == "沿岸漁業層計_養殖除く"))/2
+
+
+ggplot(dat_work_gender_agg_ratio %>% filter(`性別`=="女性"), aes(x = fisheries, y = gender_ratio)) + 
+  geom_bar(stat = "identity", width = 0.7) + 
+  #geom_point(size = 2) + 
+  geom_vline(xintercept = myLoc) +
+  scale_x_discrete(drop = FALSE) + 
+  geom_text(aes(label=round(gender_ratio,2)),hjust=0.5, vjust=-0.2) + 
+  ylim(0,0.3) +
+  annotate(geom="text", x=1.5, y=0.2, label="漁業別",
+              color="grey40",family="HiraKakuPro-W3") + 
+  annotate(geom="text", x=3.5, y=0.2, label="沿岸漁業のうち",
+              color="grey40",family="HiraKakuPro-W3") + 
+  labs(y = "漁業就業者に占める女性の割合", x="漁業種別") +
+  theme_bw(base_family="HiraKakuPro-W3") + 
+  theme(axis.text.x = element_text(angle = 45,hjust = 1))
+
+```
+
 
 
 # Accident statistics
@@ -489,7 +571,10 @@ dat_acci = read_xlsx("accidents_by_boat_size_2015_2019.xlsx") %>%
 plot_acci2 = ggplot(dat_acci, aes(x = year, y = number, fill = tons2, order = tons2)) + 
   geom_bar(position = "stack",stat = "identity") + 
   ylim(0,600) + 
-  scale_fill_viridis_d("Boat size", 
+  #scale_fill_viridis_d("Boat size",
+  scale_fill_grey("Boat size",
+                  start = 0.1,
+                  end = 0.9,
                     breaks= c("<5t","5-20t","20-100t","100-500t",">500t"),
                     labels= c("<5t","5-20t","20-100t","100-500t",">500t")) + 
   labs(x = "Year", y = "Number of Accidents") + 
@@ -498,7 +583,7 @@ plot_acci2 = ggplot(dat_acci, aes(x = year, y = number, fill = tons2, order = to
         panel.background = element_blank())
 
 plot_acci2
-## ggsave("accident_fishery_2015-2019_500t.png", plot_acci2)
+## ggsave("accident_fishery_2015-2019_500t_grey.png", plot_acci2, width = 4, height = 3, units = "in")
 ```
 ```{r acci_plot3}
 plot_acci3 = ggplot(dat_acci, aes(x = year, y = number, fill = tons3, order = tons3)) + 
